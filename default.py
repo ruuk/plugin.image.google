@@ -5,7 +5,7 @@ import xbmc, xbmcgui, xbmcplugin, xbmcaddon
 __plugin__ =  'google'
 __author__ = 'ruuk'
 __url__ = 'http://code.google.com/p/googleImagesXBMC/'
-__date__ = '09-25-2010'
+__date__ = '10-12-2010'
 __version__ = '0.9.0'
 __settings__ = xbmcaddon.Addon(id='plugin.image.google')
 __language__ = __settings__.getLocalizedString
@@ -245,10 +245,22 @@ class SaveImage:
 		save_path = __settings__.getSetting('save_path')
 		self.pd = xbmcgui.DialogProgress()
 		self.pd.create(__language__(30015),__language__(30016))
+		fail = False
 		try:
 			fn,ignore = urllib.urlretrieve(url,os.path.join(save_path,savename),self.progressUpdate)
-		finally:
-			self.pd.close()
+		except:
+			fail = True
+			
+		if fail:
+			xbmcgui.Dialog().ok(__language__(30017),__language__(30018))
+			__settings__.openSettings()
+			save_path = __settings__.getSetting('save_path')
+			try:
+				fn,ignore = urllib.urlretrieve(url,os.path.join(save_path,savename),self.progressUpdate)
+			except:
+				xbmcgui.Dialog().ok(__language__(30019),__language__(30020))
+				
+		self.pd.close()
 		xbmcgui.Dialog().ok(__language__(30012),__language__(30013).replace('@REPLACE@',savename),__language__(30014).replace('@REPLACE@',save_path))
 		
 	def progressUpdate(self,blocks,bsize,fsize):

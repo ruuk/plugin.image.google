@@ -21,6 +21,12 @@
     <string id="30015">Saving</string>
     <string id="30016">Saving...</string>
     
+    <string id="30017">Invalid Path</string>
+    <string id="30018">Please set save path in settings</string>
+    
+    <string id="30019">Fail</string>
+    <string id="30020">Failed to save image.</string>
+    
     <string id="30101">Off</string>
     <string id="30102">Moderate</string>
     <string id="30103">Active</string>
