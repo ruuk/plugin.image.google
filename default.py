@@ -1,18 +1,22 @@
 #!/usr/bin/python
-import urllib, re, simplejson, time, os
-import xbmc, xbmcgui, xbmcplugin, xbmcaddon
+
+#This import first for Boxee compatability via my xbmcaddon module for Boxee
+import xbmcaddon #@UnresolvedImport
+
+import sys, urllib, re, simplejson, time, os
+import xbmc, xbmcgui, xbmcplugin #@UnresolvedImport
 
 __plugin__ =  'google'
 __author__ = 'ruuk'
 __url__ = 'http://code.google.com/p/googleImagesXBMC/'
-__date__ = '10-12-2010'
-__version__ = '0.9.0'
+__date__ = '2-15-2011'
+__version__ = '0.9.1'
 __settings__ = xbmcaddon.Addon(id='plugin.image.google')
 __language__ = __settings__.getLocalizedString
 
-CACHE_PATH = xbmc.translatePath('special://profile/addon_data/plugin.image.google/cache/')
-HISTORY_PATH = xbmc.translatePath('special://profile/addon_data/plugin.image.google/history')
-IMAGE_PATH = xbmc.translatePath('special://home/addons/plugin.image.google/resources/images/')
+CACHE_PATH = os.path.join(__settings__.getAddonInfo('profile'),'cache')
+HISTORY_PATH = os.path.join(__settings__.getAddonInfo('profile'),'history')
+IMAGE_PATH = os.path.join(__settings__.getAddonInfo('path'),'resources','images')
 
 if not os.path.exists(CACHE_PATH): os.makedirs(CACHE_PATH)
 
@@ -64,7 +68,6 @@ class googleImagesSession:
 		self.max_history = (None,10,20,30,50,100,200,500)[int(__settings__.getSetting('max_history'))]
 	
 	def addLink(self,name,url,iconimage,tot=0,showcontext=True):
-		ok=True
 		liz=xbmcgui.ListItem(name, iconImage="DefaultImage.png", thumbnailImage=iconimage)
 		liz.setInfo( type="image", infoLabels={ "Title": name } )
 		if showcontext:
@@ -75,11 +78,10 @@ class googleImagesSession:
 			liz.addContextMenuItems(contextMenu)
 		return xbmcplugin.addDirectoryItem(handle=int(sys.argv[1]),url=url,listitem=liz,isFolder=False,totalItems=tot)
 
-	def addDir(self,name,url,mode,iconimage,page=1,tot=0):
+	def addDir(self,name,url,mode,iconimage,page=1,tot=0,sort=0):
 		u=sys.argv[0]+"?url="+urllib.quote_plus(url)+"&mode="+str(mode)+"&page="+str(page)+"&name="+urllib.quote_plus(name)
-		ok=True
 		liz=xbmcgui.ListItem(name, 'test',iconImage="DefaultFolder.png", thumbnailImage=iconimage)
-		liz.setInfo( type="image", infoLabels={"Title": name} )
+		liz.setInfo( type="image", infoLabels={"Title": name,"Label":str(sort)} )
 		return xbmcplugin.addDirectoryItem(handle=int(sys.argv[1]),url=u,listitem=liz,isFolder=True,totalItems=tot)
 	
 	def htmlToText(self,html):
@@ -91,16 +93,16 @@ class googleImagesSession:
 					.replace("&apos;","'")
 					
 	def CATEGORIES(self):
-		self.addDir(__language__(30200),'search',1,os.path.join(IMAGE_PATH,'search.png'))
-		self.addDir(__language__(30201),'advanced_search',2,os.path.join(IMAGE_PATH,'advanced.png'))
-		self.addDir(__language__(30202),'history',3,os.path.join(IMAGE_PATH,'history.png'))
-		self.addDir(__language__(30203),'saves',4,os.path.join(IMAGE_PATH,'saves.png'))
+		self.addDir(__language__(30200),'search',1,os.path.join(IMAGE_PATH,'search.png'),sort=0)
+		self.addDir(__language__(30201),'advanced_search',2,os.path.join(IMAGE_PATH,'advanced.png'),sort=1)
+		self.addDir(__language__(30202),'history',3,os.path.join(IMAGE_PATH,'history.png'),sort=2)
+		self.addDir(__language__(30203),'saves',4,os.path.join(IMAGE_PATH,'saves.png'),sort=3)
 		
 	def SEARCH_IMAGES(self,query,**kwargs):
 		clearDirFiles(CACHE_PATH)
 		if not query:
 			terms = self.getTerms()
-			if not terms: return False
+			if not terms: return True
 			query = self.api.createQuery(terms,**kwargs)
 			self.addToHistory(query)
 		images = self.api.getImagesFromQueryString(query)
@@ -109,7 +111,7 @@ class googleImagesSession:
 		for img in images:
 			title = self.htmlToText(img.get('title',''))
 			tn = img.get('tbUrl','')
-			fn,ignore = urllib.urlretrieve(tn,os.path.join(CACHE_PATH,str(ct) + tm + '.jpg'))
+			fn,ignore = urllib.urlretrieve(tn,os.path.join(CACHE_PATH,str(ct) + tm + '.jpg')) #@UnusedVariable
 			if not self.addLink(title,img.get('unescapedUrl',''),fn,tot=32): break
 			ct+=1
 		return True
@@ -247,7 +249,7 @@ class SaveImage:
 		self.pd.create(__language__(30015),__language__(30016))
 		fail = False
 		try:
-			fn,ignore = urllib.urlretrieve(url,os.path.join(save_path,savename),self.progressUpdate)
+			urllib.urlretrieve(url,os.path.join(save_path,savename),self.progressUpdate)
 		except:
 			fail = True
 			
@@ -256,7 +258,7 @@ class SaveImage:
 			__settings__.openSettings()
 			save_path = __settings__.getSetting('save_path')
 			try:
-				fn,ignore = urllib.urlretrieve(url,os.path.join(save_path,savename),self.progressUpdate)
+				urllib.urlretrieve(url,os.path.join(save_path,savename),self.progressUpdate)
 			except:
 				xbmcgui.Dialog().ok(__language__(30019),__language__(30020))
 				
@@ -299,8 +301,8 @@ def get_params():
 				param[splitparams[0]]=splitparams[1]
 							
 	return param
-        
-       
+
+
 ### Do plugin stuff --------------------------------------------------------------------------
 def doPlugin():
 	params=get_params()
@@ -332,6 +334,8 @@ def doPlugin():
 
 	gis = googleImagesSession()
 	
+	xbmcplugin.addSortMethod(int(sys.argv[1]), xbmcplugin.SORT_METHOD_TRACKNUM)
+	
 	if mode==None or url==None or len(url)<1:
 		gis.CATEGORIES()
 	elif mode==1:
@@ -344,7 +348,7 @@ def doPlugin():
 		gis.SAVES()
 	elif mode==103:
 		gis.HISTORY(query=url)
-		
+	
 	xbmcplugin.endOfDirectory(int(sys.argv[1]),succeeded=success,updateListing=update_dir,cacheToDisc=cache)
 
 if sys.argv[1] == 'save':
