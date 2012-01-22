@@ -14,9 +14,9 @@ __version__ = '0.9.2'
 __settings__ = xbmcaddon.Addon(id='plugin.image.google')
 __language__ = __settings__.getLocalizedString
 
-CACHE_PATH = os.path.join(xbmc.translatePath(__settings__.getAddonInfo('profile'),'cache'))
-HISTORY_PATH = os.path.join(xbmc.translatePath(__settings__.getAddonInfo('profile'),'history'))
-IMAGE_PATH = os.path.join(xbmc.translatePath(__settings__.getAddonInfo('path'),'resources','images'))
+CACHE_PATH = os.path.join(xbmc.translatePath(__settings__.getAddonInfo('profile')),'cache')
+HISTORY_PATH = os.path.join(xbmc.translatePath(__settings__.getAddonInfo('profile')),'history')
+IMAGE_PATH = os.path.join(xbmc.translatePath(__settings__.getAddonInfo('path')),'resources','images')
 
 if not os.path.exists(CACHE_PATH): os.makedirs(CACHE_PATH)
 
@@ -144,7 +144,7 @@ class googleImagesSession:
 				self.addDir(terms + sparams,q,103,'')
 				
 	def SAVES(self):
-		save_path = __settings__.getSetting('save_path')
+		save_path = xbmc.translatePath(__settings__.getSetting('save_path'))
 		images = os.listdir(save_path)
 		tot=len(images)
 		ct=0;
