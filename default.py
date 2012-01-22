@@ -9,14 +9,14 @@ import xbmc, xbmcgui, xbmcplugin #@UnresolvedImport
 __plugin__ =  'google'
 __author__ = 'ruuk'
 __url__ = 'http://code.google.com/p/googleImagesXBMC/'
-__date__ = '2-15-2011'
-__version__ = '0.9.1'
+__date__ = '1-22-2012'
+__version__ = '0.9.2'
 __settings__ = xbmcaddon.Addon(id='plugin.image.google')
 __language__ = __settings__.getLocalizedString
 
-CACHE_PATH = os.path.join(__settings__.getAddonInfo('profile'),'cache')
-HISTORY_PATH = os.path.join(__settings__.getAddonInfo('profile'),'history')
-IMAGE_PATH = os.path.join(__settings__.getAddonInfo('path'),'resources','images')
+CACHE_PATH = os.path.join(xbmc.translatePath(__settings__.getAddonInfo('profile'),'cache'))
+HISTORY_PATH = os.path.join(xbmc.translatePath(__settings__.getAddonInfo('profile'),'history'))
+IMAGE_PATH = os.path.join(xbmc.translatePath(__settings__.getAddonInfo('path'),'resources','images'))
 
 if not os.path.exists(CACHE_PATH): os.makedirs(CACHE_PATH)
 
