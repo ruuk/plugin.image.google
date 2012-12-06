@@ -1,6 +1,11 @@
 googleImages Changelog
 
-Current Version : 0.9.2
+Current Version : 0.9.3
+
+*** 0.9.3 ***
+
+Fix for bug with default save path
+Improved handling of some search errors
 
 *** 0.9.2 ***
 

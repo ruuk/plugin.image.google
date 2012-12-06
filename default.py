@@ -9,8 +9,8 @@ import xbmc, xbmcgui, xbmcplugin #@UnresolvedImport
 __plugin__ =  'google'
 __author__ = 'ruuk'
 __url__ = 'http://code.google.com/p/googleImagesXBMC/'
-__date__ = '1-22-2012'
-__version__ = '0.9.2'
+__date__ = '12-06-2012'
+__version__ = '0.9.3'
 __settings__ = xbmcaddon.Addon(id='plugin.image.google')
 __language__ = __settings__.getLocalizedString
 
@@ -32,12 +32,15 @@ class googleImagesAPI:
 	def getImagesFromQueryString(self,query):
 		results = []
 		for start in (0,8,16,24):
-			url = self.base_url % (start,query)
-			#print url
-			search_results = urllib.urlopen(url)
-			json = simplejson.loads(search_results.read())
-			search_results.close()
-			results += json['responseData']['results']
+			try:
+				url = self.base_url % (start,query)
+				#print url
+				search_results = urllib.urlopen(url)
+				json = simplejson.loads(search_results.read())
+				search_results.close()
+				results += json['responseData']['results']
+			except:
+				results.append[{'title':'ERROR'}]
 		return results
 	
 	def getImages(self,terms,**kwargs):
@@ -248,9 +251,12 @@ class SaveImage:
 		self.pd = xbmcgui.DialogProgress()
 		self.pd.create(__language__(30015),__language__(30016))
 		fail = False
-		try:
-			urllib.urlretrieve(url,os.path.join(save_path,savename),self.progressUpdate)
-		except:
+		if save_path:
+			try:
+				urllib.urlretrieve(url,os.path.join(save_path,savename),self.progressUpdate)
+			except:
+				fail = True
+		else:
 			fail = True
 			
 		if fail:
@@ -266,13 +272,13 @@ class SaveImage:
 		xbmcgui.Dialog().ok(__language__(30012),__language__(30013).replace('@REPLACE@',savename),__language__(30014).replace('@REPLACE@',save_path))
 		
 	def progressUpdate(self,blocks,bsize,fsize):
-		print 'cool',blocks,bsize,fsize
+		#print 'cool',blocks,bsize,fsize
 		if fsize == -1 or fsize <= bsize:
 			self.pd.update(0)
-			print 'test'
+			#print 'test'
 			return
 		percent = int((float(blocks) / (fsize/bsize)) * 100)
-		print percent
+		#print percent
 		self.pd.update(percent)
 	
 

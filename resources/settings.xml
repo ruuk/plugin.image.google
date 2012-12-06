@@ -11,7 +11,7 @@
 	<setting id="rights" type="enum" label="30008" lvalues="30171|30172|30173|30174|30175|30176" default="0"/>
   </category>
   <category label="30000">
-    <setting id="save_path" type="folder"  source="local" label="30009" default="special://screenshots"/>
+    <setting id="save_path" type="folder"  source="local" label="30009" />
     <setting id="max_history" type="enum" label="30011" values="None|10|20|30|50|100|200|500" default="1"/>
   </category>
 </settings>
