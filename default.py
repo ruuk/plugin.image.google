@@ -34,35 +34,16 @@ def convertHTMLCodes(html):
 	return html
 
 class googleImagesAPI:
-	base_url_deprecated = 'http://ajax.googleapis.com/ajax/services/search/images?v=1.0&start=%s&rsz=8&%s'
 	base_url = 'https://www.google.com/search?hl=en&site=imghp&tbm=isch{start}{query}'
 	
 	def createQuery(self,terms,**kwargs):
 		args = ['q={0}'.format(urllib.quote_plus(terms))]
-		#qdict = {'q':urllib.quote_plus(terms)}
 		for k in kwargs.keys():
 			if kwargs[k]: args.append('{0}={1}'.format(k,kwargs[k]))
-		#return urllib.urlencode(qdict)
 		return '&'.join(args)
 		
 	def parseQuery(self,query):
 		return dict(urlparse.parse_qsl(query))
-	
-	def getImagesFromQueryString(self,query):
-		results = []
-		for start in (0,8,16,24):
-			try:
-				url = self.base_url_deprecated % (start,query)
-				#print url
-				search_results = urllib.urlopen(url)
-				json = simplejson.loads(search_results.read())
-				search_results.close()
-				results += json['responseData']['results']
-			except:
-				results.append({'title':'ERROR'})
-		for result in results:
-			if 'title' in result: result['title'] = convertHTMLCodes(result['title'])
-		return results
 	
 	def parseImages(self,html):
 		soup = BeautifulSoup.BeautifulSoup(html)
@@ -152,7 +133,6 @@ class googleImagesSession:
 					
 	def CATEGORIES(self):
 		self.addDir(__language__(30200),'search',1,os.path.join(IMAGE_PATH,'search.png'),sort=0)
-		#if __settings__.getSetting('use_deprecated') == 'true':
 		self.addDir(__language__(30201),'advanced_search',2,os.path.join(IMAGE_PATH,'advanced.png'),sort=1)
 		self.addDir(__language__(30202),'history',3,os.path.join(IMAGE_PATH,'history.png'),sort=2)
 		self.addDir(__language__(30203),'saves',4,os.path.join(IMAGE_PATH,'saves.png'),sort=3)
@@ -165,70 +145,57 @@ class googleImagesSession:
 			query = self.api.createQuery(terms,**kwargs)
 			self.addToHistory(query)
 			
-		if __settings__.getSetting('use_deprecated') == 'true':
-			images = self.api.getImagesFromQueryString(query)
+		images = []
+		if self.isSlideshow:
+			for page in range(1,11):  # @UnusedVariable
+				try:
+					images += self.api.getImages(query,page=page)
+				except:
+					break
 		else:
-			images = []
-			if self.isSlideshow:
-				for page in range(1,11):  # @UnusedVariable
-					try:
-						images += self.api.getImages(query,page=page)
-					except:
-						break
-			else:
-				images = self.api.getImages(query,page=page)
+			images = self.api.getImages(query,page=page)
+			
 		ct=0;
 		tm = str(time.time())
-		if __settings__.getSetting('use_deprecated') != 'true' and page > 1 and not self.isSlideshow:
-			self.addDir('[<- Previous Page]', query, 101, '', page=page-1)
+		
+		if page > 1 and not self.isSlideshow: self.addDir('[<- Previous Page]', query, 101, '', page=page-1)
 			
 		for img in images:
 			title = self.htmlToText(img.get('title',''))
 			tn = img.get('tbUrl','')
 			fn,ignore = urllib.urlretrieve(tn,os.path.join(CACHE_PATH,str(ct) + tm + '.jpg')) #@UnusedVariable
-			if not self.addLink(title,img.get('unescapedUrl',''),fn,tot=32): break
+			if not self.addLink(title,img.get('unescapedUrl',''),fn,tot=20): break
 			ct+=1
 			
-		if __settings__.getSetting('use_deprecated') != 'true' and not self.isSlideshow:
-			self.addDir('[Next Page ->]', query, 101, '', page=page+1)
+		if not self.isSlideshow: self.addDir('[Next Page ->]', query, 101, '', page=page+1)
 			
 		return True
 	
 	def ADVANCED_SEARCH_IMAGES(self):
 		__settings__.openSettings()
-		if __settings__.getSetting('use_deprecated') == 'true':
-			safe = ['off','moderate','active'][int(__settings__.getSetting('safe'))]
-			image_size = ['','icon','small','medium','large','xlarge','xxlarge','huge'][int(__settings__.getSetting('image_size'))]
-			greyscale = ['','gray','color'][int(__settings__.getSetting('greyscale'))]
-			color = ['','black','blue','brown','gray','green','orange','pink','purple','red','teal','white','yellow'][int(__settings__.getSetting('color'))]
-			itype = ['','face','photo','clipart','lineart'][int(__settings__.getSetting('type'))]
-			filetype = ['','jpg','png','gif','bmp'][int(__settings__.getSetting('filetype'))]
-			rights = ['','cc_publicdomain','cc_attribute','cc_sharealike','cc_noncommercial','cc_nonderived'][int(__settings__.getSetting('rights'))]
-			return self.SEARCH_IMAGES('',safe=safe,imgsz=image_size,imgc=greyscale,imgcolor=color,imgtype=itype,as_filetype=filetype,as_rights=rights)
+		tbs = []
+		safe = ['','active'][int(__settings__.getSetting('safe'))]
+		if safe: tbs.append('safe:%s' % safe)
+		
+		image_size = ['','i','m','l'][int(__settings__.getSetting('image_size'))]
+		if image_size: tbs.append('isz:%s' % image_size)
+		
+		greyscale = ['','gray','color','trans'][int(__settings__.getSetting('greyscale'))]
+		if greyscale:
+			tbs.append('ic:%s' % greyscale)
 		else:
-			tbs = []
-			safe = ['','','active'][int(__settings__.getSetting('safe'))]
-			if safe: tbs.append('safe:%s' % safe)
+			color = ['','black','blue','brown','gray','green','orange','pink','purple','red','teal','white','yellow'][int(__settings__.getSetting('color'))]
+			if color: tbs.append('ic:specific,isc:%s' % color)
 			
-			image_size = ['','i','','m','l','','',''][int(__settings__.getSetting('image_size'))]
-			if image_size: tbs.append('isz:%s' % image_size)
-			
-			greyscale = ['','gray','color'][int(__settings__.getSetting('greyscale'))]
-			if greyscale:
-				tbs.append('ic:%s' % greyscale)
-			else:
-				color = ['','black','blue','brown','gray','green','orange','pink','purple','red','teal','white','yellow'][int(__settings__.getSetting('color'))]
-				if color: tbs.append('ic:specific,isc:%s' % color)
-				
-			itype = ['','face','photo','clipart','lineart'][int(__settings__.getSetting('type'))]
-			if itype: tbs.append('itp:%s' % itype)
-			
-			filetype = ['','jpg','png','gif','bmp'][int(__settings__.getSetting('filetype'))]
-			if filetype: tbs.append('ift:%s' % filetype)
-			
-			rights = ['','fmc','fc','fm','f',''][int(__settings__.getSetting('rights'))]
-			if rights: tbs.append('sur:%s' % rights)
-			return self.SEARCH_IMAGES('',tbs=','.join(tbs))
+		itype = ['','face','photo','clipart','lineart'][int(__settings__.getSetting('type'))]
+		if itype: tbs.append('itp:%s' % itype)
+		
+		filetype = ['','jpg','png','gif','bmp'][int(__settings__.getSetting('filetype'))]
+		if filetype: tbs.append('ift:%s' % filetype)
+		
+		rights = ['','fmc','fc','fm','f'][int(__settings__.getSetting('rights'))]
+		if rights: tbs.append('sur:%s' % rights)
+		return self.SEARCH_IMAGES('',tbs=','.join(tbs))
 		
 	'''
 	Grayscale  : https://www.google.com/search?q=cows&btnG=Search&um=1&hl=en&tbm=isch&tab=wi&hl=en&q=cows&tbm=isch&tbs=ic:gray&um=1
@@ -282,30 +249,15 @@ class googleImagesSession:
 		return True
 		
 	def translateParams(self,params):
-		keys = {	'safe':__language__(30002),
-					'imgsz':__language__(30003),
-					'imgc':__language__(30004),
-					'imgcolor':__language__(30005),
-					'imgtype':__language__(30006),
-					'as_filetype':__language__(30007),
-					'as_rights':__language__(30008)}
 					
-		vals = {	'moderate':__language__(30102),
-					'active':__language__(30103),
-					
-					'icon':__language__(30112),
-					'small':__language__(30113),
-					'medium':__language__(30114),
-					'large':__language__(30115),
-					'xlarge':__language__(30116),
-					'xxlarge':__language__(30117),
-					'huge':__language__(30118),
+		vals = {	'active':__language__(30103),
 					
 					'i':__language__(30112),
 					'm':__language__(30114),
-					'large':__language__(30115),
+					'l':__language__(30115),
 					
 					'color':__language__(30123),
+					'trans':__language__(30124),
 					
 					'black':__language__(30131),
 					'blue':__language__(300132),
@@ -324,12 +276,6 @@ class googleImagesSession:
 					'photo':__language__(30153),
 					'clipart':__language__(30154),
 					'lineart':__language__(30155),
-					
-					'cc_publicdomain':__language__(30172),
-					'cc_attribute':__language__(30173),
-					'cc_sharealike':__language__(30174),
-					'cc_noncommercial':__language__(30175),
-					'cc_nonderived':__language__(30176),
 		
 					'fmc':__language__(30172),
 					'fm':__language__(30173),
@@ -355,10 +301,10 @@ class googleImagesSession:
 					if k_v[-1] == 'specific':
 						specific = True
 					else:
-						if not specific and k_v[-1] == 'gray': k_v[-1] = __language__(30004)
+						if not specific and k_v[-1] == 'gray': k_v[-1] = __language__(30123)
 						trans.append(tbsKeys.get(k_v[0],k_v[0]) +'='+ vals.get(k_v[-1],k_v[-1]))
 			else:
-				trans.append(keys.get(p_v[0],'') +'='+ vals.get(p_v[-1],''))
+				pass
 		return trans
 			
 	def getHistory(self):
