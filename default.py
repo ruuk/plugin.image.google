@@ -12,9 +12,11 @@ __plugin__ =  'google'
 __author__ = 'ruuk'
 __url__ = 'http://code.google.com/p/googleImagesXBMC/'
 __date__ = '12-06-2012'
-__version__ = '0.9.3'
 __settings__ = xbmcaddon.Addon(id='plugin.image.google')
+__version__ = __settings__.getAddonInfo('version')
 __language__ = __settings__.getLocalizedString
+
+DEBUG = False
 
 CACHE_PATH = os.path.join(xbmc.translatePath(__settings__.getAddonInfo('profile')),'cache')
 HISTORY_PATH = os.path.join(xbmc.translatePath(__settings__.getAddonInfo('profile')),'history')
@@ -22,20 +24,30 @@ IMAGE_PATH = os.path.join(xbmc.translatePath(__settings__.getAddonInfo('path')),
 
 if not os.path.exists(CACHE_PATH): os.makedirs(CACHE_PATH)
 
+def LOG(msg):
+	print 'GoogleImages: {0}'.format(msg)
+	
+LOG('Version: {0}'.format(__version__))
+
 def cUConvert(m): return unichr(int(m.group(1)))
 def cTConvert(m): return unichr(htmlentitydefs.name2codepoint.get(m.group(1),32))
 
 def convertHTMLCodes(html):
 	try:
-		html = re.sub('&#(\d{1,5});',cUConvert,html)
+		html = re.sub('&#(\d{1,5});',cUConvert,html.decode('utf-8','replace'))
 		html = re.sub('&(\w+?);',cTConvert,html)
 	except:
-		pass
+		import traceback
+		traceback.print_exc()
 	return html
 
 class googleImagesAPI:
-	base_url = 'https://www.google.com/search?hl=en&site=imghp&tbm=isch{start}{query}'
+	baseURL = 'https://www.google.com/search?hl=en&site=imghp&tbm=isch{start}{query}'
+	perPage = 20
 	
+	def __init__(self):
+		self.lastSearchTotal = '?'
+		
 	def createQuery(self,terms,**kwargs):
 		args = ['q={0}'.format(urllib.quote_plus(terms))]
 		for k in kwargs.keys():
@@ -47,6 +59,15 @@ class googleImagesAPI:
 	
 	def parseImages(self,html):
 		soup = BeautifulSoup.BeautifulSoup(html)
+		self.lastSearchTotal = '?'
+		totDiv = soup.find("div", { "id" : "resultStats" })
+		if totDiv:
+			try:
+				#<div id="resultStats">About 69,300,000 results</div>
+				self.lastSearchTotal = re.findall('\s([\d,]+)\s',totDiv.string)[-1]
+			except:
+				pass
+			
 		results = []
 		for td in soup.findAll('td'):
 			if td.find('td'): continue
@@ -92,10 +113,9 @@ class googleImagesAPI:
 		opener = urllib2.build_opener()
 		opener.addheaders = [('User-agent', 'Mozilla/5.0')]
 		start = ''
-		if page > 1: start = '&start=%s' % ((page - 1) * 20)
-		url = self.base_url.format(start=start,query='&' + query)
-		print url
-		html = opener.open(url)
+		if page > 1: start = '&start=%s' % ((page - 1) * self.perPage)
+		url = self.baseURL.format(start=start,query='&' + query)
+		html = opener.open(url).read()		
 		return self.parseImages(html)
 
 
@@ -158,16 +178,16 @@ class googleImagesSession:
 		ct=0;
 		tm = str(time.time())
 		
-		if page > 1 and not self.isSlideshow: self.addDir('[<- Previous Page]', query, 101, '', page=page-1)
+		if page > 1 and not self.isSlideshow: self.addDir('[<- Previous Page ({0} - {1})]'.format(((page-2)*self.api.perPage)+1,(page-1)*self.api.perPage), query, 101, '', page=page-1)
 			
 		for img in images:
 			title = self.htmlToText(img.get('title',''))
 			tn = img.get('tbUrl','')
 			fn,ignore = urllib.urlretrieve(tn,os.path.join(CACHE_PATH,str(ct) + tm + '.jpg')) #@UnusedVariable
-			if not self.addLink(title,img.get('unescapedUrl',''),fn,tot=20): break
+			if not self.addLink(title,img.get('unescapedUrl',''),fn,tot=self.api.perPage): break
 			ct+=1
 			
-		if not self.isSlideshow: self.addDir('[Next Page ->]', query, 101, '', page=page+1)
+		if not self.isSlideshow: self.addDir('[Next Page ({0} - {1} of {2}) ->]'.format((page*self.api.perPage)+1,(page+1)*self.api.perPage,self.api.lastSearchTotal), query, 101, '', page=page+1)
 			
 		return True
 	
@@ -433,10 +453,11 @@ def doPlugin():
 	except:
 			pass
 
-	print "Mode: "+str(mode)
-	print "URL: "+str(url)
-	print "Name: "+str(name)
-	print "Page: "+str(page)
+	if DEBUG:
+		print "Mode: "+str(mode)
+		print "URL: "+str(url)
+		print "Name: "+str(name)
+		print "Page: "+str(page)
 
 	update_dir = False
 	success = True

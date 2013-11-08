@@ -1,6 +1,12 @@
 googleImages Changelog
 
-Current Version : 0.9.3
+Current Version : 0.9.4
+
+*** 0.9.4 ***
+
+Moved from deprecated Google API to scraping method
+Added keyword highlighting
+Added pagination
 
 *** 0.9.3 ***
 
