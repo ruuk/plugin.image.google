@@ -1,6 +1,11 @@
 googleImages Changelog
 
-Current Version : 0.9.4
+Current Version : 0.9.5
+
+*** 0.9.5 ***
+
+Removed simplejson dependency
+Added Beutifulsoup dependency
 
 *** 0.9.4 ***
 
