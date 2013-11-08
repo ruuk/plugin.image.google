@@ -13,5 +13,6 @@
   <category label="30000">
     <setting id="save_path" type="folder"  source="local" label="30009" />
     <setting id="max_history" type="enum" label="30011" values="None|10|20|30|50|100|200|500" default="1"/>
+    <setting id="use_deprecated" type="bool" label="30204" default="false" />
   </category>
 </settings>

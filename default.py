@@ -3,8 +3,10 @@
 #This import first for Boxee compatability via my xbmcaddon module for Boxee
 import xbmcaddon #@UnresolvedImport
 
-import sys, urllib, re, simplejson, time, os
+import sys, urllib, urllib2, urlparse, re, simplejson, time, os
 import xbmc, xbmcgui, xbmcplugin #@UnresolvedImport
+import BeautifulSoup
+import htmlentitydefs
 
 __plugin__ =  'google'
 __author__ = 'ruuk'
@@ -20,55 +22,108 @@ IMAGE_PATH = os.path.join(xbmc.translatePath(__settings__.getAddonInfo('path')),
 
 if not os.path.exists(CACHE_PATH): os.makedirs(CACHE_PATH)
 
+def cUConvert(m): return unichr(int(m.group(1)))
+def cTConvert(m): return unichr(htmlentitydefs.name2codepoint.get(m.group(1),32))
+
+def convertHTMLCodes(html):
+	try:
+		html = re.sub('&#(\d{1,5});',cUConvert,html)
+		html = re.sub('&(\w+?);',cTConvert,html)
+	except:
+		pass
+	return html
+
 class googleImagesAPI:
-	base_url = 'http://ajax.googleapis.com/ajax/services/search/images?v=1.0&start=%s&rsz=8&%s'
+	base_url_deprecated = 'http://ajax.googleapis.com/ajax/services/search/images?v=1.0&start=%s&rsz=8&%s'
+	base_url = 'https://www.google.com/search?hl=en&site=imghp&tbm=isch{start}{query}'
 	
 	def createQuery(self,terms,**kwargs):
-		qdict = {'q':terms}
+		args = ['q={0}'.format(urllib.quote_plus(terms))]
+		#qdict = {'q':urllib.quote_plus(terms)}
 		for k in kwargs.keys():
-			if kwargs[k]: qdict[k] = kwargs[k]
-		return urllib.urlencode(qdict)
+			if kwargs[k]: args.append('{0}={1}'.format(k,kwargs[k]))
+		#return urllib.urlencode(qdict)
+		return '&'.join(args)
 		
+	def parseQuery(self,query):
+		return dict(urlparse.parse_qsl(query))
+	
 	def getImagesFromQueryString(self,query):
 		results = []
 		for start in (0,8,16,24):
 			try:
-				url = self.base_url % (start,query)
+				url = self.base_url_deprecated % (start,query)
 				#print url
 				search_results = urllib.urlopen(url)
 				json = simplejson.loads(search_results.read())
 				search_results.close()
 				results += json['responseData']['results']
 			except:
-				results.append[{'title':'ERROR'}]
+				results.append({'title':'ERROR'})
+		for result in results:
+			if 'title' in result: result['title'] = convertHTMLCodes(result['title'])
 		return results
 	
-	def getImages(self,terms,**kwargs):
-		query = self.createQuery(terms,kwargs)
-		return self.getImagesWithQueryString(query)
+	def parseImages(self,html):
+		soup = BeautifulSoup.BeautifulSoup(html)
+		results = []
+		for td in soup.findAll('td'):
+			if td.find('td'): continue
+			br = td.find('br')
+			if br: br.extract()
+			cite = td.find('cite')
+			site = ''
+			if cite:
+				site = cite.string
+				cite.extract()
+			i = td.find('a')
+			if not i: continue
+			if i.text or not 'imgres' in i.get('href',''): continue
+			for match in soup.findAll('b'):
+				match.string = '[COLOR FF00FF00][B]{0}[/B][/COLOR]'.format(str(match.string))
+				match.replaceWithChildren()
+			title = ''
+			info = ''
+			br = td.find('br')
+			if br:
+				string = br.nextSibling
+				if string and isinstance(string,BeautifulSoup.NavigableString):
+					while string and isinstance(string,BeautifulSoup.NavigableString):
+						title += str(string)
+						string = string.nextSibling
+					title = title.strip()
+					br = string
+					if br and br.name == 'br':
+						string = br.nextSibling
+						if string and isinstance(string,BeautifulSoup.NavigableString):
+							info = str(string).strip()
+					
+			title = convertHTMLCodes(title)
+			info = convertHTMLCodes(info)
+			image = urllib.unquote(i.get('href','').split('imgurl=',1)[-1].split('&',1)[0])
+			tn = ''
+			img = i.find('img')
+			if img: tn = img.get('src')
+			results.append({'title':title,'tbUrl':tn,'unescapedUrl':image,'site':site,'info':info})
+		return results
 	
-	''' content
-		GsearchResultClass
-		visibleUrl
-		titleNoFormatting
-		originalContextUrl
-		unescapedUrl
-		url
-		title
-		imageId
-		height
-		width
-		tbUrl
-		tbWidth
-		contentNoFormatting
-		tbHeight
-	'''
+	def getImages(self,query,page=1):
+		opener = urllib2.build_opener()
+		opener.addheaders = [('User-agent', 'Mozilla/5.0')]
+		start = ''
+		if page > 1: start = '&start=%s' % ((page - 1) * 20)
+		url = self.base_url.format(start=start,query='&' + query)
+		print url
+		html = opener.open(url)
+		return self.parseImages(html)
+
 
 class googleImagesSession:
 	def __init__(self):
 		self.api = googleImagesAPI()
 		self.save_path = __settings__.getSetting('save_path')
 		self.max_history = (None,10,20,30,50,100,200,500)[int(__settings__.getSetting('max_history'))]
+		self.isSlideshow = False
 	
 	def addLink(self,name,url,iconimage,tot=0,showcontext=True):
 		liz=xbmcgui.ListItem(name, iconImage="DefaultImage.png", thumbnailImage=iconimage)
@@ -76,7 +131,7 @@ class googleImagesSession:
 		if showcontext:
 			savename = url.rsplit('/')[-1]
 			if not ('.jpg' in savename or '.png' in savename or '.gif' in savename or '.bmp' in savename):
-				savename = name.encode('ascii','replace').replace(' ','_')
+				savename = name.decode('utf-8','replace').replace(' ','_')
 			contextMenu = [(__language__(30010),'XBMC.RunScript(special://home/addons/plugin.image.google/default.py,save,'+url+','+savename+')')]
 			liz.addContextMenuItems(contextMenu)
 		return xbmcplugin.addDirectoryItem(handle=int(sys.argv[1]),url=url,listitem=liz,isFolder=False,totalItems=tot)
@@ -84,7 +139,7 @@ class googleImagesSession:
 	def addDir(self,name,url,mode,iconimage,page=1,tot=0,sort=0):
 		u=sys.argv[0]+"?url="+urllib.quote_plus(url)+"&mode="+str(mode)+"&page="+str(page)+"&name="+urllib.quote_plus(name)
 		liz=xbmcgui.ListItem(name, 'test',iconImage="DefaultFolder.png", thumbnailImage=iconimage)
-		liz.setInfo( type="image", infoLabels={"Title": name,"Label":str(sort)} )
+		liz.setInfo( type="image", infoLabels={"Title": name} )
 		return xbmcplugin.addDirectoryItem(handle=int(sys.argv[1]),url=u,listitem=liz,isFolder=True,totalItems=tot)
 	
 	def htmlToText(self,html):
@@ -97,38 +152,106 @@ class googleImagesSession:
 					
 	def CATEGORIES(self):
 		self.addDir(__language__(30200),'search',1,os.path.join(IMAGE_PATH,'search.png'),sort=0)
+		#if __settings__.getSetting('use_deprecated') == 'true':
 		self.addDir(__language__(30201),'advanced_search',2,os.path.join(IMAGE_PATH,'advanced.png'),sort=1)
 		self.addDir(__language__(30202),'history',3,os.path.join(IMAGE_PATH,'history.png'),sort=2)
 		self.addDir(__language__(30203),'saves',4,os.path.join(IMAGE_PATH,'saves.png'),sort=3)
 		
-	def SEARCH_IMAGES(self,query,**kwargs):
+	def SEARCH_IMAGES(self,query,page=1,**kwargs):
 		clearDirFiles(CACHE_PATH)
 		if not query:
 			terms = self.getTerms()
 			if not terms: return True
 			query = self.api.createQuery(terms,**kwargs)
 			self.addToHistory(query)
-		images = self.api.getImagesFromQueryString(query)
+			
+		if __settings__.getSetting('use_deprecated') == 'true':
+			images = self.api.getImagesFromQueryString(query)
+		else:
+			images = []
+			if self.isSlideshow:
+				for page in range(1,11):  # @UnusedVariable
+					try:
+						images += self.api.getImages(query,page=page)
+					except:
+						break
+			else:
+				images = self.api.getImages(query,page=page)
 		ct=0;
 		tm = str(time.time())
+		if __settings__.getSetting('use_deprecated') != 'true' and page > 1 and not self.isSlideshow:
+			self.addDir('[<- Previous Page]', query, 101, '', page=page-1)
+			
 		for img in images:
 			title = self.htmlToText(img.get('title',''))
 			tn = img.get('tbUrl','')
 			fn,ignore = urllib.urlretrieve(tn,os.path.join(CACHE_PATH,str(ct) + tm + '.jpg')) #@UnusedVariable
 			if not self.addLink(title,img.get('unescapedUrl',''),fn,tot=32): break
 			ct+=1
+			
+		if __settings__.getSetting('use_deprecated') != 'true' and not self.isSlideshow:
+			self.addDir('[Next Page ->]', query, 101, '', page=page+1)
+			
 		return True
 	
 	def ADVANCED_SEARCH_IMAGES(self):
 		__settings__.openSettings()
-		safe = ['off','moderate','active'][int(__settings__.getSetting('safe'))]
-		image_size = ['','icon','small','medium','large','xlarge','xxlarge','huge'][int(__settings__.getSetting('image_size'))]
-		greyscale = ['','gray','color'][int(__settings__.getSetting('greyscale'))]
-		color = ['','black','blue','brown','gray','green','orange','pink','purple','red','teal','white','yellow'][int(__settings__.getSetting('color'))]
-		itype = ['','face','photo','clipart','lineart'][int(__settings__.getSetting('type'))]
-		filetype = ['','jpg','png','gif','bmp'][int(__settings__.getSetting('filetype'))]
-		rights = ['','cc_publicdomain','cc_attribute','cc_sharealike','cc_noncommercial','cc_nonderived'][int(__settings__.getSetting('rights'))]
-		return self.SEARCH_IMAGES('',safe=safe,imgsz=image_size,imgc=greyscale,imgcolor=color,imgtype=itype,as_filetype=filetype,as_rights=rights)
+		if __settings__.getSetting('use_deprecated') == 'true':
+			safe = ['off','moderate','active'][int(__settings__.getSetting('safe'))]
+			image_size = ['','icon','small','medium','large','xlarge','xxlarge','huge'][int(__settings__.getSetting('image_size'))]
+			greyscale = ['','gray','color'][int(__settings__.getSetting('greyscale'))]
+			color = ['','black','blue','brown','gray','green','orange','pink','purple','red','teal','white','yellow'][int(__settings__.getSetting('color'))]
+			itype = ['','face','photo','clipart','lineart'][int(__settings__.getSetting('type'))]
+			filetype = ['','jpg','png','gif','bmp'][int(__settings__.getSetting('filetype'))]
+			rights = ['','cc_publicdomain','cc_attribute','cc_sharealike','cc_noncommercial','cc_nonderived'][int(__settings__.getSetting('rights'))]
+			return self.SEARCH_IMAGES('',safe=safe,imgsz=image_size,imgc=greyscale,imgcolor=color,imgtype=itype,as_filetype=filetype,as_rights=rights)
+		else:
+			tbs = []
+			safe = ['','','active'][int(__settings__.getSetting('safe'))]
+			if safe: tbs.append('safe:%s' % safe)
+			
+			image_size = ['','i','','m','l','','',''][int(__settings__.getSetting('image_size'))]
+			if image_size: tbs.append('isz:%s' % image_size)
+			
+			greyscale = ['','gray','color'][int(__settings__.getSetting('greyscale'))]
+			if greyscale:
+				tbs.append('ic:%s' % greyscale)
+			else:
+				color = ['','black','blue','brown','gray','green','orange','pink','purple','red','teal','white','yellow'][int(__settings__.getSetting('color'))]
+				if color: tbs.append('ic:specific,isc:%s' % color)
+				
+			itype = ['','face','photo','clipart','lineart'][int(__settings__.getSetting('type'))]
+			if itype: tbs.append('itp:%s' % itype)
+			
+			filetype = ['','jpg','png','gif','bmp'][int(__settings__.getSetting('filetype'))]
+			if filetype: tbs.append('ift:%s' % filetype)
+			
+			rights = ['','fmc','fc','fm','f',''][int(__settings__.getSetting('rights'))]
+			if rights: tbs.append('sur:%s' % rights)
+			return self.SEARCH_IMAGES('',tbs=','.join(tbs))
+		
+	'''
+	Grayscale  : https://www.google.com/search?q=cows&btnG=Search&um=1&hl=en&tbm=isch&tab=wi&hl=en&q=cows&tbm=isch&tbs=ic:gray&um=1
+	Any Color  : https://www.google.com/search?q=cows&btnG=Search&um=1&hl=en&tbm=isch&tab=wi&hl=en&q=cows&tbas=0&tbm=isch&um=1
+	Full Color : https://www.google.com/search?q=cows&btnG=Search&um=1&hl=en&tbm=isch&tab=wi&hl=en&q=cows&tbas=0&tbm=isch&tbs=ic:color&um=1
+	Transparent: https://www.google.com/search?q=cows&btnG=Search&um=1&hl=en&tbm=isch&tab=wi&hl=en&q=cows&tbas=0&tbm=isch&tbs=ic:trans&um=1
+	Red        : https://www.google.com/search?q=cows&btnG=Search&um=1&hl=en&tbm=isch&tab=wi&hl=en&q=cows&tbas=0&tbm=isch&tbs=ic:specific,isc:red&um=1
+	             red, orange, yellow, green, teal, blue, purple, pink, white, gray, black, brown
+	             
+	Large      : https://www.google.com/search?q=cows&btnG=Search&um=1&hl=en&tbm=isch&tab=wi&hl=en&q=cows&tbas=0&tbm=isch&tbs=isz:l&um=1
+	             l, m, i
+	
+	Face       : https://www.google.com/search?hl=en&site=imghp&tbm=isch&source=hp&biw=1751&bih=822&q=cows&oq=cows&q=cows&tbm=isch&tbs=itp:face
+	             face, photo, clipart, lineart, animated
+	             
+	safe=active
+	tbs=sur:fmc Labeled Commericial Reuse Mod
+	tbs=sur:fm Labeled Reuse Mod
+	tbs=sur:fc Labeled Commericial Reuse
+	tbs=sur:f Labeled Reuse
+	
+	ex tbs=sur:fmc,ic-gray
+	'''
 		
 	def HISTORY(self,query=None):
 		if query:
@@ -178,6 +301,10 @@ class googleImagesSession:
 					'xxlarge':__language__(30117),
 					'huge':__language__(30118),
 					
+					'i':__language__(30112),
+					'm':__language__(30114),
+					'large':__language__(30115),
+					
 					'color':__language__(30123),
 					
 					'black':__language__(30131),
@@ -202,10 +329,36 @@ class googleImagesSession:
 					'cc_attribute':__language__(30173),
 					'cc_sharealike':__language__(30174),
 					'cc_noncommercial':__language__(30175),
-					'cc_nonderived':__language__(30176)}
+					'cc_nonderived':__language__(30176),
+		
+					'fmc':__language__(30172),
+					'fm':__language__(30173),
+					'fc':__language__(30174),
+					'f':__language__(30175)
+				}
+		
+		tbsKeys = { 'safe':__language__(30002),
+					'isz':__language__(30003),
+					'ic':__language__(30005),
+					'isc':__language__(30005),
+					'itp':__language__(30006),
+					'ift':__language__(30007),
+					'sur':__language__(30008)
+				}
+
 		trans = []
+		specific = False
 		for p_v in params:
-			trans.append(keys.get(p_v[0],'') +'='+ vals.get(p_v[-1],''))
+			if p_v[0] == 'tbs':
+				for item in p_v[-1].split(','):
+					k_v = item.split(':')
+					if k_v[-1] == 'specific':
+						specific = True
+					else:
+						if not specific and k_v[-1] == 'gray': k_v[-1] = __language__(30004)
+						trans.append(tbsKeys.get(k_v[0],k_v[0]) +'='+ vals.get(k_v[-1],k_v[-1]))
+			else:
+				trans.append(keys.get(p_v[0],'') +'='+ vals.get(p_v[-1],''))
 		return trans
 			
 	def getHistory(self):
@@ -291,7 +444,7 @@ def clearDirFiles(filepath):
 		
 ## XBMC Plugin stuff starts here --------------------------------------------------------            
 def get_params():
-	param=[]
+	param={}
 	paramstring=sys.argv[2]
 	if len(paramstring)>=2:
 		params=sys.argv[2]
@@ -315,7 +468,7 @@ def doPlugin():
 	url=None
 	name=None
 	mode=None
-
+	page=1
 
 	try:
 			url=urllib.unquote_plus(params["url"])
@@ -329,18 +482,25 @@ def doPlugin():
 			mode=int(params["mode"])
 	except:
 			pass
+	try:
+			page = int(params["page"])
+	except:
+			pass
 
 	print "Mode: "+str(mode)
 	print "URL: "+str(url)
 	print "Name: "+str(name)
+	print "Page: "+str(page)
 
 	update_dir = False
 	success = True
 	cache = True
-
+	
+	
 	gis = googleImagesSession()
 	
-	xbmcplugin.addSortMethod(int(sys.argv[1]), xbmcplugin.SORT_METHOD_TRACKNUM)
+	gis.isSlideshow = params.get('plugin_slideshow_ss','false') == 'true'
+	#xbmcplugin.addSortMethod(int(sys.argv[1]), xbmcplugin.SORT_METHOD_TRACKNUM)
 	
 	if mode==None or url==None or len(url)<1:
 		gis.CATEGORIES()
@@ -352,6 +512,9 @@ def doPlugin():
 		gis.HISTORY()
 	elif mode==4:
 		gis.SAVES()
+	elif mode==101:
+		success = gis.SEARCH_IMAGES(url, page=page)
+		update_dir=True
 	elif mode==103:
 		gis.HISTORY(query=url)
 	
