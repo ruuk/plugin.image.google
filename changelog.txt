@@ -1,6 +1,11 @@
 googleImages Changelog
 
-Current Version : 0.9.5
+Current Version : 0.9.6
+
+*** 0.9.6 ***
+
+Fix for encoding errors
+Remove actual simplejson import statement
 
 *** 0.9.5 ***
 

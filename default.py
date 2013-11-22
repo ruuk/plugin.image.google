@@ -3,9 +3,9 @@
 #This import first for Boxee compatability via my xbmcaddon module for Boxee
 import xbmcaddon #@UnresolvedImport
 
-import sys, urllib, urllib2, urlparse, re, simplejson, time, os
-import xbmc, xbmcgui, xbmcplugin #@UnresolvedImport
-import BeautifulSoup
+import sys, urllib, urllib2, urlparse, re, time, os, random
+import xbmc, xbmcgui, xbmcplugin
+import BeautifulSoup # @UnresolvedImport
 import htmlentitydefs
 
 __plugin__ =  'google'
@@ -27,6 +27,11 @@ if not os.path.exists(CACHE_PATH): os.makedirs(CACHE_PATH)
 def LOG(msg):
 	print 'GoogleImages: {0}'.format(msg)
 	
+def ERROR(message):
+	LOG('ERROR: ' + message)
+	import traceback
+	traceback.print_exc()
+
 LOG('Version: {0}'.format(__version__))
 
 def cUConvert(m): return unichr(int(m.group(1)))
@@ -37,8 +42,7 @@ def convertHTMLCodes(html):
 		html = re.sub('&#(\d{1,5});',cUConvert,html.decode('utf-8','replace'))
 		html = re.sub('&(\w+?);',cTConvert,html)
 	except:
-		import traceback
-		traceback.print_exc()
+		ERROR('convertHTMLCodes()')
 	return html
 
 class googleImagesAPI:
@@ -125,14 +129,21 @@ class googleImagesSession:
 		self.save_path = __settings__.getSetting('save_path')
 		self.max_history = (None,10,20,30,50,100,200,500)[int(__settings__.getSetting('max_history'))]
 		self.isSlideshow = False
-	
+		
+	fileKeepCharacters = (' ','.','_')
+	def createValidFilename(self,text):
+		try:
+			text = text.encode('utf-8','replace')
+			return "".join(c for c in text if c.isalnum() or c in self.fileKeepCharacters).rstrip()
+		except:
+			ERROR('createValidFilename()')
+			return 'saved_google_image_%s' % random.randint(1,999999)
+		
 	def addLink(self,name,url,iconimage,tot=0,showcontext=True):
 		liz=xbmcgui.ListItem(name, iconImage="DefaultImage.png", thumbnailImage=iconimage)
 		liz.setInfo( type="image", infoLabels={ "Title": name } )
 		if showcontext:
-			savename = url.rsplit('/')[-1]
-			if not ('.jpg' in savename or '.png' in savename or '.gif' in savename or '.bmp' in savename):
-				savename = name.decode('utf-8','replace').replace(' ','_')
+			savename = self.createValidFilename(url.rsplit('/')[-1])
 			contextMenu = [(__language__(30010),'XBMC.RunScript(special://home/addons/plugin.image.google/default.py,save,'+url+','+savename+')')]
 			liz.addContextMenuItems(contextMenu)
 		return xbmcplugin.addDirectoryItem(handle=int(sys.argv[1]),url=url,listitem=liz,isFolder=False,totalItems=tot)
