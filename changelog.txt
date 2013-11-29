@@ -1,9 +1,10 @@
 googleImages Changelog
 
-Current Version : 0.9.6
+Current Version : 0.9.7
 
 *** 0.9.7 ***
 
+Fix for changes from google
 Updated addon.xml python import
 Added license, forum and source tags to addon.xml
 

@@ -84,7 +84,7 @@ class googleImagesAPI:
 				cite.extract()
 			i = td.find('a')
 			if not i: continue
-			if i.text or not 'imgres' in i.get('href',''): continue
+			if i.text or not '/url?q' in i.get('href',''): continue
 			for match in soup.findAll('b'):
 				match.string = '[COLOR FF00FF00][B]{0}[/B][/COLOR]'.format(str(match.string))
 				match.replaceWithChildren()
@@ -104,25 +104,40 @@ class googleImagesAPI:
 						if string and isinstance(string,BeautifulSoup.NavigableString):
 							info = str(string).strip()
 					
-			title = convertHTMLCodes(title)
+			title = convertHTMLCodes(title).encode('utf-8')
 			info = convertHTMLCodes(info)
-			image = urllib.unquote(i.get('href','').split('imgurl=',1)[-1].split('&',1)[0])
+			#image = urllib.unquote(i.get('href','').split('imgurl=',1)[-1].split('&',1)[0])
+			page = urllib.unquote(i.get('href','').split('q=',1)[-1].split('&',1)[0]).encode('utf-8')
 			tn = ''
 			img = i.find('img')
 			if img: tn = img.get('src')
-			results.append({'title':title,'tbUrl':tn,'unescapedUrl':image,'site':site,'info':info})
+			image = tn
+			results.append({'title':title,'tbUrl':tn,'unescapedUrl':image,'site':site,'info':info,'page':page})
 		return results
 	
 	def getImages(self,query,page=1):
-		opener = urllib2.build_opener()
-		opener.addheaders = [('User-agent', 'Mozilla/5.0')]
 		start = ''
 		if page > 1: start = '&start=%s' % ((page - 1) * self.perPage)
 		url = self.baseURL.format(start=start,query='&' + query)
-		html = opener.open(url).read()		
+		html = self.getPage(url)
+		#open('/tmp/test.html','w').write(repr(html))	
 		return self.parseImages(html)
 
-
+	def getPage(self,url):
+		opener = urllib2.build_opener()
+		opener.addheaders = [('User-agent', 'Mozilla/5.0')]
+		html = opener.open(url).read()
+		return html
+		
+	def getPageImages(self,url):
+		html = self.getPage(url)
+		soup = BeautifulSoup.BeautifulSoup(html)
+		results = []
+		for img in soup.findAll('img'):
+			src = img.get('src')
+			results.append({'title':src,'url':urlparse.urljoin(url,src)})
+		return results
+			
 class googleImagesSession:
 	def __init__(self):
 		self.api = googleImagesAPI()
@@ -168,6 +183,13 @@ class googleImagesSession:
 		self.addDir(__language__(30202),'history',3,os.path.join(IMAGE_PATH,'history.png'),sort=2)
 		self.addDir(__language__(30203),'saves',4,os.path.join(IMAGE_PATH,'saves.png'),sort=3)
 		
+	def PAGE_IMAGES(self,url):
+		images = self.api.getPageImages(url)
+		for img in images:
+			#fn,ignore = urllib.urlretrieve(tn,os.path.join(CACHE_PATH,str(ct) + tm + '.jpg')) #@UnusedVariable
+			if not self.addLink(img.get('title',''),img.get('url',''),img.get('url','')): break
+		return True
+	
 	def SEARCH_IMAGES(self,query,page=1,**kwargs):
 		clearDirFiles(CACHE_PATH)
 		if not query:
@@ -183,6 +205,14 @@ class googleImagesSession:
 					images += self.api.getImages(query,page=page)
 				except:
 					break
+			ct=0
+			tm = str(time.time())
+			for img in images:
+				tn = img.get('tbUrl','')
+				fn,ignore = urllib.urlretrieve(tn,os.path.join(CACHE_PATH,str(ct) + tm + '.jpg'))
+				self.addLink(self.htmlToText(img.get('title','')),fn,fn,tot=100)
+				ct+=1
+			return True
 		else:
 			images = self.api.getImages(query,page=page)
 			
@@ -195,7 +225,7 @@ class googleImagesSession:
 			title = self.htmlToText(img.get('title',''))
 			tn = img.get('tbUrl','')
 			fn,ignore = urllib.urlretrieve(tn,os.path.join(CACHE_PATH,str(ct) + tm + '.jpg')) #@UnusedVariable
-			if not self.addLink(title,img.get('unescapedUrl',''),fn,tot=self.api.perPage): break
+			if not self.addDir(title,img.get('page',''),200,fn,tot=self.api.perPage): break
 			ct+=1
 			
 		if not self.isSlideshow: self.addDir('[Next Page ({0} - {1} of {2}) ->]'.format((page*self.api.perPage)+1,(page+1)*self.api.perPage,self.api.lastSearchTotal), query, 101, '', page=page+1)
@@ -495,6 +525,8 @@ def doPlugin():
 		update_dir=True
 	elif mode==103:
 		gis.HISTORY(query=url)
+	elif mode==200:
+		gis.PAGE_IMAGES(url)
 	
 	xbmcplugin.endOfDirectory(int(sys.argv[1]),succeeded=success,updateListing=update_dir,cacheToDisc=cache)
 
