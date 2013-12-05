@@ -1,6 +1,12 @@
 googleImages Changelog
 
-Current Version : 0.9.7
+Current Version : 0.9.8
+
+*** 0.9.8 ***
+
+Now sorts page images by best match in URL
+History no longer saves duplicate queries
+Converted strings.xml to strings.po
 
 *** 0.9.7 ***
 

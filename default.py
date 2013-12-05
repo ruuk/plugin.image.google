@@ -52,7 +52,12 @@ class googleImagesAPI:
 	def __init__(self):
 		self.lastSearchTotal = '?'
 		
+	def lastTerms(self,terms=None):
+		if not terms: return __settings__.getSetting('last_terms')
+		__settings__.setSetting('last_terms',terms)
+		
 	def createQuery(self,terms,**kwargs):
+		self.lastTerms(terms.lower())
 		args = ['q={0}'.format(urllib.quote_plus(terms))]
 		for k in kwargs.keys():
 			if kwargs[k]: args.append('{0}={1}'.format(k,kwargs[k]))
@@ -135,8 +140,25 @@ class googleImagesAPI:
 		results = []
 		for img in soup.findAll('img'):
 			src = img.get('src')
-			results.append({'title':src,'url':urlparse.urljoin(url,src)})
-		return results
+			results.append({'title':src,'url':urlparse.urljoin(url,src),'file':src.split('/')[-1]})
+		final = []
+		print 'test'
+		lastTerms = self.lastTerms()
+		spaceLess = lastTerms.replace(' ','')
+		singular = re.sub('(\w{2,})s',r'\1',lastTerms)
+		print lastTerms
+		for r in results:
+			if lastTerms in re.sub('[\+\.\-_,]',' ',r['file']).lower():
+				final.append(r)
+		for r in results:
+			if spaceLess in r['file'].lower() and not r in final:
+				final.append(r)
+		for r in results:
+			if singular in re.sub('[\+\.\-_,]',' ',r['file']).lower() and not r in final:
+				final.append(r)
+		for r in results:
+			if not r in final: final.append(r)
+		return final
 			
 class googleImagesSession:
 	def __init__(self):
@@ -159,7 +181,7 @@ class googleImagesSession:
 		liz.setInfo( type="image", infoLabels={ "Title": name } )
 		if showcontext:
 			savename = self.createValidFilename(url.rsplit('/')[-1])
-			contextMenu = [(__language__(30010),'XBMC.RunScript(special://home/addons/plugin.image.google/default.py,save,'+url+','+savename+')')]
+			contextMenu = [(__language__(32010),'XBMC.RunScript(special://home/addons/plugin.image.google/default.py,save,'+url+','+savename+')')]
 			liz.addContextMenuItems(contextMenu)
 		return xbmcplugin.addDirectoryItem(handle=int(sys.argv[1]),url=url,listitem=liz,isFolder=False,totalItems=tot)
 
@@ -178,10 +200,10 @@ class googleImagesSession:
 					.replace("&apos;","'")
 					
 	def CATEGORIES(self):
-		self.addDir(__language__(30200),'search',1,os.path.join(IMAGE_PATH,'search.png'),sort=0)
-		self.addDir(__language__(30201),'advanced_search',2,os.path.join(IMAGE_PATH,'advanced.png'),sort=1)
-		self.addDir(__language__(30202),'history',3,os.path.join(IMAGE_PATH,'history.png'),sort=2)
-		self.addDir(__language__(30203),'saves',4,os.path.join(IMAGE_PATH,'saves.png'),sort=3)
+		self.addDir(__language__(32200),'search',1,os.path.join(IMAGE_PATH,'search.png'),sort=0)
+		self.addDir(__language__(32201),'advanced_search',2,os.path.join(IMAGE_PATH,'advanced.png'),sort=1)
+		self.addDir(__language__(32202),'history',3,os.path.join(IMAGE_PATH,'history.png'),sort=2)
+		self.addDir(__language__(32203),'saves',4,os.path.join(IMAGE_PATH,'saves.png'),sort=3)
 		
 	def PAGE_IMAGES(self,url):
 		images = self.api.getPageImages(url)
@@ -283,6 +305,7 @@ class googleImagesSession:
 		
 	def HISTORY(self,query=None):
 		if query:
+			self.api.lastTerms(urllib.unquote_plus(self.api.parseQuery(query).get('q')))
 			self.SEARCH_IMAGES(query)
 		else:
 			for q in self.getHistory():
@@ -311,46 +334,46 @@ class googleImagesSession:
 		
 	def translateParams(self,params):
 					
-		vals = {	'active':__language__(30103),
+		vals = {	'active':__language__(32103),
 					
-					'i':__language__(30112),
-					'm':__language__(30114),
-					'l':__language__(30115),
+					'i':__language__(32112),
+					'm':__language__(32114),
+					'l':__language__(32115),
 					
-					'color':__language__(30123),
-					'trans':__language__(30124),
+					'color':__language__(32123),
+					'trans':__language__(32124),
 					
-					'black':__language__(30131),
-					'blue':__language__(300132),
-					'brown':__language__(30133),
-					'gray':__language__(30134),
-					'green':__language__(30135),
-					'orange':__language__(30136),
-					'pink':__language__(30137),
-					'purple':__language__(30138),
-					'red':__language__(30139),
-					'teal':__language__(30140),
-					'white':__language__(30141),
-					'yellow':__language__(30142),
+					'black':__language__(32131),
+					'blue':__language__(320132),
+					'brown':__language__(32133),
+					'gray':__language__(32134),
+					'green':__language__(32135),
+					'orange':__language__(32136),
+					'pink':__language__(32137),
+					'purple':__language__(32138),
+					'red':__language__(32139),
+					'teal':__language__(32140),
+					'white':__language__(32141),
+					'yellow':__language__(32142),
 					
-					'face':__language__(30152),
-					'photo':__language__(30153),
-					'clipart':__language__(30154),
-					'lineart':__language__(30155),
+					'face':__language__(32152),
+					'photo':__language__(32153),
+					'clipart':__language__(32154),
+					'lineart':__language__(32155),
 		
-					'fmc':__language__(30172),
-					'fm':__language__(30173),
-					'fc':__language__(30174),
-					'f':__language__(30175)
+					'fmc':__language__(32172),
+					'fm':__language__(32173),
+					'fc':__language__(32174),
+					'f':__language__(32175)
 				}
 		
-		tbsKeys = { 'safe':__language__(30002),
-					'isz':__language__(30003),
-					'ic':__language__(30005),
-					'isc':__language__(30005),
-					'itp':__language__(30006),
-					'ift':__language__(30007),
-					'sur':__language__(30008)
+		tbsKeys = { 'safe':__language__(32002),
+					'isz':__language__(32003),
+					'ic':__language__(32005),
+					'isc':__language__(32005),
+					'itp':__language__(32006),
+					'ift':__language__(32007),
+					'sur':__language__(32008)
 				}
 
 		trans = []
@@ -362,7 +385,7 @@ class googleImagesSession:
 					if k_v[-1] == 'specific':
 						specific = True
 					else:
-						if not specific and k_v[-1] == 'gray': k_v[-1] = __language__(30123)
+						if not specific and k_v[-1] == 'gray': k_v[-1] = __language__(32123)
 						trans.append(tbsKeys.get(k_v[0],k_v[0]) +'='+ vals.get(k_v[-1],k_v[-1]))
 			else:
 				pass
@@ -382,12 +405,13 @@ class googleImagesSession:
 		
 	def addToHistory(self,query):
 		history = self.getHistory()
+		if query in history: history.remove(query)
 		history.insert(0,query)
 		history = history[0:self.max_history]
 		self.saveHistory(history)
 	
 	def getTerms(self):
-		keyboard = xbmc.Keyboard('',__language__(30300))
+		keyboard = xbmc.Keyboard('',__language__(32300))
 		keyboard.doModal()
 		if (keyboard.isConfirmed()):
 			return keyboard.getText()
@@ -409,7 +433,7 @@ class SaveImage:
 		savename = sys.argv[3]
 		save_path = __settings__.getSetting('save_path')
 		self.pd = xbmcgui.DialogProgress()
-		self.pd.create(__language__(30015),__language__(30016))
+		self.pd.create(__language__(32015),__language__(32016))
 		fail = False
 		if save_path:
 			try:
@@ -420,16 +444,16 @@ class SaveImage:
 			fail = True
 			
 		if fail:
-			xbmcgui.Dialog().ok(__language__(30017),__language__(30018))
+			xbmcgui.Dialog().ok(__language__(32017),__language__(32018))
 			__settings__.openSettings()
 			save_path = __settings__.getSetting('save_path')
 			try:
 				urllib.urlretrieve(url,os.path.join(save_path,savename),self.progressUpdate)
 			except:
-				xbmcgui.Dialog().ok(__language__(30019),__language__(30020))
+				xbmcgui.Dialog().ok(__language__(32019),__language__(32020))
 				
 		self.pd.close()
-		xbmcgui.Dialog().ok(__language__(30012),__language__(30013).replace('@REPLACE@',savename),__language__(30014).replace('@REPLACE@',save_path))
+		xbmcgui.Dialog().ok(__language__(32012),__language__(32013).replace('@REPLACE@',savename),__language__(32014).replace('@REPLACE@',save_path))
 		
 	def progressUpdate(self,blocks,bsize,fsize):
 		#print 'cool',blocks,bsize,fsize
