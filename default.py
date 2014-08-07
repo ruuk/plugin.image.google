@@ -139,14 +139,12 @@ class googleImagesAPI:
 		soup = BeautifulSoup.BeautifulSoup(html)
 		results = []
 		for img in soup.findAll('img'):
-			src = img.get('src')
+			src = img.get('src') or ''
 			results.append({'title':src,'url':urlparse.urljoin(url,src),'file':src.split('/')[-1]})
 		final = []
-		print 'test'
 		lastTerms = self.lastTerms()
 		spaceLess = lastTerms.replace(' ','')
 		singular = re.sub('(\w{2,})s',r'\1',lastTerms)
-		print lastTerms
 		for r in results:
 			if lastTerms in re.sub('[\+\.\-_,]',' ',r['file']).lower():
 				final.append(r)
@@ -212,6 +210,7 @@ class googleImagesSession:
 			if not self.addLink(img.get('title',''),img.get('url',''),img.get('url','')): break
 		return True
 	
+	
 	def SEARCH_IMAGES(self,query,page=1,**kwargs):
 		clearDirFiles(CACHE_PATH)
 		if not query:
@@ -222,18 +221,36 @@ class googleImagesSession:
 			
 		images = []
 		if self.isSlideshow:
+			import threadpool
+			pool = threadpool.ThreadPool(20)
+			
+			def pageWorker(page):
+				if xbmc.abortRequested: return (None,None)
+				title = self.htmlToText(page.get('title',''))
+				img = None
+				try:
+					img = (self.api.getPageImages(page.get('page')) or [{}])[0]
+				except:
+					pass
+				return (title,img)
+				
+			def addPageImage(w,title_img):
+				title,img = title_img 
+				if not img: return
+				fn = img.get('url','')
+				self.addLink(title, fn, fn, 200)
+				
 			for page in range(1,11):  # @UnusedVariable
 				try:
-					images += self.api.getImages(query,page=page)
+					pages = self.api.getImages(query,page=page)
+					requests = threadpool.makeRequests(pageWorker, pages, callback=addPageImage)
+					[pool.putRequest(req) for req in requests]
+					pool.poll()
 				except:
 					break
-			ct=0
-			tm = str(time.time())
-			for img in images:
-				tn = img.get('tbUrl','')
-				fn,ignore = urllib.urlretrieve(tn,os.path.join(CACHE_PATH,str(ct) + tm + '.jpg'))
-				self.addLink(self.htmlToText(img.get('title','')),fn,fn,tot=100)
-				ct+=1
+				
+			pool.wait()
+			pool.dismissWorkers()
 			return True
 		else:
 			images = self.api.getImages(query,page=page)
